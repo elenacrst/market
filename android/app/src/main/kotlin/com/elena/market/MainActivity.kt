@@ -3,29 +3,22 @@ package com.elena.market
 import android.animation.AnimatorSet
 import android.animation.ObjectAnimator
 import android.animation.ValueAnimator
+import android.os.Build
 import android.os.Bundle
-import android.transition.AutoTransition
-import android.transition.Transition
-import android.transition.TransitionManager
-import android.view.animation.AccelerateDecelerateInterpolator
 import android.view.View
-import android.widget.FrameLayout
-import androidx.constraintlayout.widget.ConstraintLayout
-import androidx.constraintlayout.widget.ConstraintSet
+import android.widget.ImageView
 import androidx.core.animation.doOnEnd
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.core.splashscreen.SplashScreenViewProvider
 import androidx.core.view.postDelayed
-import androidx.core.view.ViewCompat
 import androidx.core.view.WindowCompat
-import androidx.core.view.WindowInsetsCompat
 import androidx.interpolator.view.animation.FastOutLinearInInterpolator
 import io.flutter.embedding.android.FlutterActivity
 
-class MainActivity: FlutterActivity() {
+class MainActivity : FlutterActivity() {
 
-    var flutterUIReady : Boolean = false
-    var initialAnimationFinished : Boolean = false
+    private var flutterUIReady: Boolean = false
+    private var initialAnimationFinished: Boolean = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -40,26 +33,17 @@ class MainActivity: FlutterActivity() {
         insetsController?.isAppearanceLightNavigationBars = true
         insetsController?.isAppearanceLightStatusBars = true
 
-        // The content view needs to be set before calling setOnExitAnimationListener
-        // to ensure that the SplashScreenView is attached to the right view root.
-        val rootLayout = findViewById(android.R.id.content) as FrameLayout
-        View.inflate(this, R.layout.main_activity_2, rootLayout)
-
-        ViewCompat.setOnApplyWindowInsetsListener(findViewById(R.id.container)) { view, windowInsets ->
-            val insets = windowInsets.getInsets(WindowInsetsCompat.Type.systemBars())
-            view.setPadding(insets.left, insets.top, insets.right, insets.bottom)
-            windowInsets.inset(insets)
-        }
-
         // Setting an OnExitAnimationListener on the splash screen indicates
         // to the system that the application will handle the exit animation.
         // The listener will be called once the app is ready.
-        splashScreen.setOnExitAnimationListener { splashScreenViewProvider ->
-            onSplashScreenExit(splashScreenViewProvider)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            splashScreen.setOnExitAnimationListener { splashScreenViewProvider ->
+                onSplashScreenExit(splashScreenViewProvider)
+            }
         }
     }
 
-    override fun onFlutterUiDisplayed(){
+    override fun onFlutterUiDisplayed() {
         flutterUIReady = true
 
         if (initialAnimationFinished) {
@@ -67,19 +51,31 @@ class MainActivity: FlutterActivity() {
         }
     }
 
-    override fun onFlutterUiNoLongerDisplayed(){
+    override fun onFlutterUiNoLongerDisplayed() {
         flutterUIReady = false
     }
 
     /**
      * Hides the splash screen only when the entire animation has finished and the Flutter UI is ready to display.
      */
-    private fun hideSplashScreenAnimation(){
-        val splashView = findViewById(R.id.container) as ConstraintLayout
+    private fun hideSplashScreenAnimation() {
+        val splashView = findViewById<ImageView>(R.id.imageView)
         splashView
             .animate()
             .alpha(0.0f)
-            .setDuration(SPLASHSCREEN_FINAL_ANIMATION_ALPHA_ANIMATION_DURATION)
+            .duration = SPLASHSCREEN_ALPHA_ANIMATION_DURATION
+
+        val heightAnimation = ObjectAnimator.ofFloat(
+            splashView,
+            View.SCALE_Y,
+            splashView.height.toFloat(),
+            0f
+        )
+        heightAnimation.duration = 10000
+        heightAnimation.interpolator = FastOutLinearInInterpolator()
+        // And play all of the animation together.
+        val animatorSet = AnimatorSet()
+        animatorSet.playTogether(heightAnimation)
     }
 
     /**
@@ -95,70 +91,28 @@ class MainActivity: FlutterActivity() {
         alpha.duration = SPLASHSCREEN_ALPHA_ANIMATION_DURATION
         alpha.interpolator = accelerateInterpolator
 
-        // And translate the icon down.
-        val translationY = ObjectAnimator.ofFloat(
+        val scaleY = ObjectAnimator.ofFloat(
             iconView,
-            View.TRANSLATION_Y,
-            iconView.translationY,
-            splashScreenView.height.toFloat()
+            View.SCALE_Y,
+            iconView.scaleY,
+            0.0f
         )
-        translationY.duration = SPLASHSCREEN_TY_ANIMATION_DURATION
-        translationY.interpolator = accelerateInterpolator
+        scaleY.duration = SPLASHSCREEN_ALPHA_ANIMATION_DURATION
+        scaleY.interpolator = accelerateInterpolator
+
+        val scaleX = ObjectAnimator.ofFloat(
+            iconView,
+            View.SCALE_X,
+            iconView.scaleX,
+            0.0f
+        )
+        scaleX.duration = SPLASHSCREEN_ALPHA_ANIMATION_DURATION
+        scaleX.interpolator = accelerateInterpolator
 
         // And play all of the animation together.
         val animatorSet = AnimatorSet()
-        animatorSet.playTogether(alpha)
+        animatorSet.playTogether(alpha, scaleY, scaleX)
 
-        // Apply layout constraints of starting frame of animation to
-        // FrameLayout's container for the TransitionManager to know
-        // where to start the transition.
-        val root = findViewById<ConstraintLayout>(R.id.container)
-        val set1 = ConstraintSet().apply {
-            clone(this@MainActivity, R.layout.main_activity)
-        }
-        set1.applyTo(root)
-
-        // Retrieve layout constraints of final frame of animation
-        // for TransitionManager to know where to end the transition.
-        val set2 = ConstraintSet().apply {
-            clone(this@MainActivity, R.layout.main_activity_2)
-        }
-
-        var transitionStarted = false
-        val autoTransition = AutoTransition().apply {
-            interpolator = AccelerateDecelerateInterpolator()
-        }
-        autoTransition.addListener(object: Transition.TransitionListener {
-            override fun onTransitionEnd(transition: Transition) {
-                initialAnimationFinished = true
-
-                if (flutterUIReady) {
-                    hideSplashScreenAnimation()
-                }
-            }
-            override fun onTransitionCancel(transition: Transition){}
-            override fun onTransitionPause(transition: Transition) {}
-            override fun onTransitionResume(transition: Transition) {}
-            override fun onTransitionStart(transition: Transition) {}
-        })
-
-        val alphaUpdateListener: (ValueAnimator) -> Unit = { valueAnimator ->
-            if (!transitionStarted && valueAnimator.animatedFraction > 0.5) {
-                transitionStarted = true
-
-                TransitionManager.beginDelayedTransition(root, autoTransition)
-                iconView.visibility = View.GONE
-
-                // Apply constraints of final frame of animation to
-                // FrameLayout's container once the transition is in progress.
-                set2.applyTo(root)
-            }
-            splashScreenView.background.alpha = valueAnimator.animatedValue as Int
-        }
-        alpha.addUpdateListener(alphaUpdateListener)
-
-        // Once the application is finished, remove the splash screen from our view
-        // hierarchy.
         animatorSet.doOnEnd {
             splashScreenViewProvider.remove()
         }
@@ -187,9 +141,7 @@ class MainActivity: FlutterActivity() {
     }
 
     private companion object {
-        const val SPLASHSCREEN_ALPHA_ANIMATION_DURATION = 500 as Long
-        const val SPLASHSCREEN_TY_ANIMATION_DURATION = 500 as Long
-        const val SPLASHSCREEN_FINAL_ANIMATION_ALPHA_ANIMATION_DURATION = 250 as Long
+        const val SPLASHSCREEN_ALPHA_ANIMATION_DURATION = 500L
         const val WAIT_FOR_AVD_TO_FINISH = false
     }
 }

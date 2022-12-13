@@ -3,6 +3,14 @@
     <item>
         <color android:color="#f89f8b" />
     </item>
+    <item
+        android:width="200dp"
+        android:height="200dp"
+        android:gravity="center">
+        <shape android:shape="oval">
+            <solid android:color="#FBF5F4" />
+        </shape>
+    </item>
     <item>
         <bitmap
             android:gravity="center"
